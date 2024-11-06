@@ -34,20 +34,26 @@ import java.lang.classfile.ClassModel;
 import java.lang.classfile.MethodModel;
 import java.lang.instrument.ClassFileTransformer;
 import java.lang.instrument.Instrumentation;
+import java.lang.instrument.UnmodifiableClassException;
 import java.security.ProtectionDomain;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.List;
 import java.util.Set;
 
 public class TestJavaAgent1 {
 
     public static void premain(
-                    String agentArgs, Instrumentation inst) {
+            String agentArgs, Instrumentation inst) throws UnmodifiableClassException {
         AgentPremainHelper.parseOptions(agentArgs);
         System.setProperty("instrument.enable", "true");
         AgentPremainHelper.load(TestJavaAgent1.class);
         if (!ImageInfo.inImageRuntimeCode()) {
             DemoTransformer dt = new DemoTransformer();
             inst.addTransformer(dt, true);
+            inst.retransformClasses(dt.getTargetClasses());
         } else {
             /**
              * Test {@code inst} is {@link NativeImageNoOpRuntimeInstrumentation} and behaves as
@@ -136,10 +142,18 @@ public class TestJavaAgent1 {
      */
     static class DemoTransformer implements ClassFileTransformer {
 
-        private String internalClassName;
+        private Map<String, Class<? extends ClassVisitor>> transforms = new HashMap<>();
+        private List<Class<?>> targetClasses = new ArrayList<>();
 
         DemoTransformer() {
-            internalClassName = "com/oracle/svm/test/javaagent/AgentTest";
+            try {
+                targetClasses.add(AgentTest.class);
+            }catch (NoClassDefFoundError e){
+
+            }
+            targetClasses.add(Class.class);
+            transforms.put("com/oracle/svm/test/javaagent/AgentTest", AgentTestCV.class);
+            transforms.put("java/lang/Class", ClassCV.class);
         }
 
         @Override

@@ -27,7 +27,9 @@ package com.oracle.svm.driver;
 import static com.oracle.svm.core.util.EnvVariableUtils.EnvironmentVariable;
 
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -1499,8 +1501,44 @@ public class NativeImage {
         }
 
         if (!javaAgentOpts.isEmpty()) {
+            Path proxyAgentPath = config.getJavaHome().resolve("lib/graalvm/svm-agent-proxy.jar");
+            if (Files.notExists(proxyAgentPath)) {
+                throw NativeImage.showError("Could not build with -javaagent option because the proxy agent "
+                        + proxyAgentPath + " that should be provided by GraalVM is not found.");
+            }
+            StringBuilder agentCmd = new StringBuilder();
             for (ArgumentEntry javaAgentOpt : javaAgentOpts) {
-                args.add("-javaagent:" + javaAgentOpt.value);
+                int firstPos = javaAgentOpt.value.indexOf('=');
+                String jarFile;
+                String agentOpt = null;
+                if (firstPos == -1) {
+                    jarFile = javaAgentOpt.value;
+                } else {
+                    jarFile = javaAgentOpt.value.substring(0, firstPos);
+                    agentOpt = javaAgentOpt.value.substring(firstPos + 1);
+                }
+                Path targetJarPath = Paths.get(jarFile);
+                imageBuilderClasspath.add(targetJarPath);
+                imageBuilderJavaArgs.add("--add-exports=java.base/jdk.internal.module=ALL-UNNAMED");
+                processJarManifestMainAttributes(targetJarPath, (file, attributes) -> {
+                    String premainClass = attributes.getValue("Premain-Class");
+                    agentCmd.append(premainClass);
+                });
+                if (agentOpt != null) {
+                    agentCmd.append(":").append(agentOpt).append("\n");
+                }
+            }
+            try {
+                Path agentOptionFilePath = Files.createTempFile("svm-driver-", "");
+                try (
+                        BufferedWriter bw = new BufferedWriter(new FileWriter(agentOptionFilePath.toFile()))) {
+                    bw.write(agentCmd.toString());
+                } catch (IOException e) {
+                    throw NativeImage.showError("Could not start build with -javaagent, because failed to prepare agent option file.", e);
+                }
+                args.add("-javaagent:" + proxyAgentPath + "=@" + agentOptionFilePath);
+            } catch (IOException e) {
+                throw NativeImage.showError("Could not start build with -javaagent, because failed to prepare agent option file.", e);
             }
         }
 

@@ -1618,6 +1618,7 @@ native_image = mx_sdk_vm.GraalVmJreComponent(
                 'substratevm:SVM_CONFIGURE',
                 'substratevm:JVMTI_AGENT_BASE',
                 'substratevm:SVM_AGENT',
+                'substratevm:SVM_AGENT_PROXY'
             ],
             build_args=driver_build_args + [
                 '--features=com.oracle.svm.agent.NativeImageAgent$RegistrationFeature',

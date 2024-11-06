@@ -28,7 +28,10 @@ package com.oracle.svm.test.javaagent;
 
 import com.oracle.svm.test.javaagent.agent1.TestJavaAgent1;
 import com.oracle.svm.test.javaagent.agent2.TestJavaAgent2;
+import org.graalvm.nativeimage.ImageInfo;
 import org.junit.Assert;
+
+import java.lang.reflect.Field;
 
 public class AgentTest {
 
@@ -63,6 +66,22 @@ public class AgentTest {
         Assert.assertEquals(11, getCounter());
     }
 
+    /**
+     * {@link Class#getFields()} is transformed at {@link  TestJavaAgent1.DemoTransformer.ClassCV} to returns null for
+     * {@code AgentTest.class}.
+     * But the JDK class transformation should be prevented by proxy agent, so it should still return an empty array.
+     */
+    private static void testProxyAgent(){
+        Class<?> c = AgentTest.class;
+        Field[] fields = c.getFields();
+        if (!ImageInfo.inImageRuntimeCode()) {
+            Assert.assertNull(fields);
+        } else {
+            Assert.assertEquals(0, fields.length);
+        }
+
+    }
+
     private static int getCounter() {
         return 10;
     }
@@ -72,6 +91,7 @@ public class AgentTest {
         testAgentOptions();
         testPremainSequence();
         testInstrumentation();
+        testProxyAgent();
         System.out.println("Finished running Agent test.");
     }
 }
